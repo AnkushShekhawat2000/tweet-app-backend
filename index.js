@@ -166,7 +166,6 @@ app.get("/get-all-posts", async(req, res) => {
 
    try{
     const posts = await postModel.find().sort({creationDateTime : -1});
-    console.log(posts);
     return res.send(posts);
    } catch(error){
 
