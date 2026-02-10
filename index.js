@@ -133,7 +133,7 @@ app.post("/create-post", async (req, res) => {
 
           const savedPost = await postObj.save();
 
-              return res.status(500).json(
+              return res.status(201).json(
                     {
                       status: 201,
                       message: "post created successfully",
