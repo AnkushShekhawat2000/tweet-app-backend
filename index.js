@@ -6,6 +6,8 @@ dotenv.config();
 connectDB();
 const userModel = require("./model/userModel");
 const postModel = require("./model/postModel");
+const followRouter = require("./routers/followRouter");
+const followModel = require("./model/followModel");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,6 +21,8 @@ app.get("/", (req, res) => {
     status: "success",
   });
 });
+
+app.use("/follow", followRouter);
 
 app.post("/register", async (req, res) => {
   const { username, name, email, password } = req.body;
@@ -98,7 +102,6 @@ app.post("/google-login", async (req, res) => {
       });
     }
 
-    // ❗ New user → register
     const newUser = new userModel({
       name,
       email,
@@ -141,10 +144,9 @@ app.get("/loggedInUser", async (req, res) => {
 
 app.post("/create-post", async (req, res) => {
   try {
-    const { profilePhoto, postBody, postImage, username, name, email } =
+    const { profilePhoto, postBody, postImage, username, name, email, userId } =
       req.body;
 
-    console.log(req.body);
 
     const postObj = new postModel({
       profilePhoto: profilePhoto,
@@ -153,6 +155,7 @@ app.post("/create-post", async (req, res) => {
       username: username,
       name: name,
       email: email,
+      userId,
     });
 
     const savedPost = await postObj.save();
@@ -163,19 +166,6 @@ app.post("/create-post", async (req, res) => {
       post: savedPost,
     });
   } catch (err) {
-    return res.status(500).json({
-      status: 500,
-      message: "Server Error",
-      error: error.message,
-    });
-  }
-});
-
-app.get("/get-all-posts", async (req, res) => {
-  try {
-    const posts = await postModel.find().sort({ creationDateTime: -1 });
-    return res.send(posts);
-  } catch (error) {
     return res.status(500).json({
       status: 500,
       message: "Server Error",
@@ -260,6 +250,51 @@ app.patch("/edit-post/:id", async (req, res) => {
   }
 });
 
+app.post("/get-all-posts", async (req, res) => {
+  const { userId } = req.body;
+  try {
+    const posts = await postModel.find().sort({ creationDateTime: -1 });
+
+    const updatedPosts = await Promise.all(
+      posts.map(async (post) => {
+        const isFollowing = await followModel.findOne({
+          followerUserId: userId,
+          followingUserId: post.userId,
+        });
+
+        const isLiked = post.likes.includes(userId);
+
+        const isBookmarked = post.bookmarks.some(
+          (id) => id.toString() === userId,
+        );
+
+        return {
+          _id: post._id,
+          postBody: post.postBody,
+          postImage: post.postImage,
+          userId: post.userId,
+          name: post.name,
+          username: post.username,
+          profilePhoto: post.profilePhoto,
+          creationDateTime: post.creationDateTime,
+
+          isFollowing: !!isFollowing,
+          isLiked,
+          likeCount: post.likes.length,
+          isBookmarked,
+        };
+      }),
+    );
+    res.json(updatedPosts);
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/get-user-posts", async (req, res) => {
   const email = req.query.email;
 
@@ -307,6 +342,82 @@ app.patch("/userupdate/:email", async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Something went wrong", error });
+  }
+});
+
+app.post("/like", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  try {
+    const post = await postModel.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const alreadyLiked = post.likes.includes(userId);
+    if (alreadyLiked) {
+      return res.json({ message: "Already liked" });
+    }
+
+    post.likes.push(userId);
+    await post.save();
+
+    return res.json({ message: "Liked successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/unlike", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  try {
+    await postModel.findByIdAndUpdate(postId, {
+      $pull: {
+        likes: userId,
+      },
+    });
+
+    res.json({ message: "Unliked" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/bookmark", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  try {
+    await postModel.findByIdAndUpdate(postId, {
+      $addToSet: {
+        bookmarks: userId,
+      },
+    });
+
+    res.json({ message: "Bookmarked" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/unbookmark", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  try {
+    await postModel.findByIdAndUpdate(postId, {
+      $pull: {
+        bookmarks: userId,
+      },
+    });
+
+    res.json({ message: "Unbookmarked" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

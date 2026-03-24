@@ -50,12 +50,8 @@ const userSchema = new Schema(
             default: null
         }
 
-
-
-
-
     },
-    { timestamps: true } // For tracking createdAt and updatedAt fields
+    { timestamps: true } 
 )
 
 
