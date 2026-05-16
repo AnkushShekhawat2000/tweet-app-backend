@@ -1,29 +1,88 @@
 const Follow = require("../model/followModel");
 const User = require("../model/userModel");
+const notificationModel = require("../model/notificationModel");
 
+
+
+
+
+
+// const followUserController = async (req, res) => {
+//   const { followerUserId, followingUserId } = req.body;
+
+//   try {
+
+//     const follower = await User.findById(followerUserId);
+//     if (!follower) {
+//       return res.status(404).json({ message: "Follower not found" });
+//     }
+
+  
+//     const followingUser = await User.findById(followingUserId);
+//     if (!followingUser) {
+//       return res.status(404).json({ message: "User to follow not found" });
+//     }
+
+//     if (followerUserId === followingUserId) {
+//       return res.status(400).json({ message: "You cannot follow yourself" });
+//     }
+
+//     const alreadyFollow = await Follow.findOne({
+//       followerUserId,
+//       followingUserId,
+//     });
+
+//     if (alreadyFollow) {
+//       return res.status(400).json({ message: "Already following" });
+//     }
+
+  
+//     const follow = new Follow({
+//       followerUserId,
+//       followingUserId,
+//     });
+
+//     await follow.save();
+
+//     return res.status(200).json({
+//       message: "Follow successful",
+//     });
+
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error });
+//   }
+// };
 
 
 
 
 
 const followUserController = async (req, res) => {
+
   const { followerUserId, followingUserId } = req.body;
 
   try {
 
     const follower = await User.findById(followerUserId);
+
     if (!follower) {
-      return res.status(404).json({ message: "Follower not found" });
+      return res.status(404).json({
+        message: "Follower not found",
+      });
     }
 
-  
     const followingUser = await User.findById(followingUserId);
+
     if (!followingUser) {
-      return res.status(404).json({ message: "User to follow not found" });
+      return res.status(404).json({
+        message: "User to follow not found",
+      });
     }
 
     if (followerUserId === followingUserId) {
-      return res.status(400).json({ message: "You cannot follow yourself" });
+      return res.status(400).json({
+        message: "You cannot follow yourself",
+      });
     }
 
     const alreadyFollow = await Follow.findOne({
@@ -32,10 +91,13 @@ const followUserController = async (req, res) => {
     });
 
     if (alreadyFollow) {
-      return res.status(400).json({ message: "Already following" });
+      return res.status(400).json({
+        message: "Already following",
+      });
     }
 
-  
+    // FOLLOW SAVE
+
     const follow = new Follow({
       followerUserId,
       followingUserId,
@@ -43,13 +105,47 @@ const followUserController = async (req, res) => {
 
     await follow.save();
 
+    // NOTIFICATION
+
+    if (
+      followerUserId.toString() !==
+      followingUserId.toString()
+    ) {
+
+      const notification = new notificationModel({
+
+        senderId: followerUserId,
+
+        receiverId: followingUserId,
+
+        senderName: follower.name,
+
+        senderProfile: follower.profilePhoto,
+
+        type: "follow",
+
+        text: `${follower.name} started following you `
+
+      });
+
+      await notification.save();
+
+    }
+
     return res.status(200).json({
+      success: true,
       message: "Follow successful",
     });
 
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+
   }
+
 };
 
 

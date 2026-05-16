@@ -8,6 +8,7 @@ const userModel = require("./model/userModel");
 const postModel = require("./model/postModel");
 const followRouter = require("./routers/followRouter");
 const followModel = require("./model/followModel");
+const notificationModel = require("./model/notificationModel");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +52,7 @@ app.post("/register", async (req, res) => {
     const userDb = await userObj.save();
 
     console.log("data saved");
+    
 
     return res.send({
       status: 201,
@@ -250,49 +252,146 @@ app.patch("/edit-post/:id", async (req, res) => {
   }
 });
 
+
+
+
+// app.post("/get-all-posts", async (req, res) => {
+//   const { userId } = req.body;
+
+//   try {
+//     const posts = await postModel.find().sort({ creationDateTime: -1 });
+
+//     const updatedPosts = await Promise.all(
+//       posts.map(async (post) => {
+//         const isFollowing = await followModel.findOne({
+//           followerUserId: userId,
+//           followingUserId: post.userId,
+//         });
+
+//         const isLiked = post.likes.includes(userId);
+
+//         const isBookmarked = post.bookmarks.some(
+//           (id) => id.toString() === userId,
+//         );
+
+//         return {
+//           _id: post._id,
+//           postBody: post.postBody,
+//           postImage: post.postImage,
+//           userId: post.userId,
+//           name: post.name,
+//           username: post.username,
+//           profilePhoto: post.profilePhoto,
+//           creationDateTime: post.creationDateTime,
+
+//           isFollowing: !!isFollowing,
+//           isLiked,
+//           likeCount: post.likes.length,
+//           isBookmarked,
+//         };
+//       }),
+//     );
+//     res.json(updatedPosts);
+//   } catch (error) {
+//     return res.status(500).json({
+//       status: 500,
+//       message: "Server Error",
+//       error: error.message,
+//     });
+//   }
+// });
+
+
+
+
 app.post("/get-all-posts", async (req, res) => {
+
   const { userId } = req.body;
+
+  // PAGINATION
+
+  const page = Number(req.query.page) || 1;
+
+  const limit = Number(req.query.limit) || 5;
+
+  const skip = (page - 1) * limit;
+
   try {
-    const posts = await postModel.find().sort({ creationDateTime: -1 });
+
+    // PAGINATED POSTS
+
+    const posts = await postModel
+      .find()
+      .sort({ creationDateTime: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const updatedPosts = await Promise.all(
+
       posts.map(async (post) => {
+
         const isFollowing = await followModel.findOne({
+
           followerUserId: userId,
+
           followingUserId: post.userId,
+
         });
 
         const isLiked = post.likes.includes(userId);
 
         const isBookmarked = post.bookmarks.some(
-          (id) => id.toString() === userId,
+          (id) => id.toString() === userId
         );
 
         return {
+
           _id: post._id,
+
           postBody: post.postBody,
+
           postImage: post.postImage,
+
           userId: post.userId,
+
           name: post.name,
+
           username: post.username,
+
           profilePhoto: post.profilePhoto,
+
           creationDateTime: post.creationDateTime,
 
           isFollowing: !!isFollowing,
+
           isLiked,
+
           likeCount: post.likes.length,
+
           isBookmarked,
+
         };
-      }),
+
+      })
+
     );
-    res.json(updatedPosts);
+
+    return res.status(200).json(updatedPosts);
+
   } catch (error) {
+
     return res.status(500).json({
+
       status: 500,
+
       message: "Server Error",
+
       error: error.message,
+
     });
+
   }
+
 });
 
 app.get("/get-user-posts", async (req, res) => {
@@ -345,32 +444,114 @@ app.patch("/userupdate/:email", async (req, res) => {
   }
 });
 
+// app.post("/like", async (req, res) => {
+//   const { postId, userId } = req.body;
+
+//   try {
+//     const post = await postModel.findById(postId);
+//     if (!post) {
+//       return res.status(404).json({ message: "Post not found" });
+//     }
+
+//     const user = await userModel.findById(userId);
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     const alreadyLiked = post.likes.includes(userId);
+//     if (alreadyLiked) {
+//       return res.json({ message: "Already liked" });
+//     }
+
+//     post.likes.push(userId);
+//     await post.save();
+
+//       await notification.save();
+
+//     }
+
+//     return res.json({ message: "Liked successfully" });
+//   } catch (error) {
+//     return res.status(500).json({ message: error.message });
+//   }
+// });
+
+
+
 app.post("/like", async (req, res) => {
+
   const { postId, userId } = req.body;
 
   try {
+
     const post = await postModel.findById(postId);
+
     if (!post) {
-      return res.status(404).json({ message: "Post not found" });
+      return res.status(404).json({
+        message: "Post not found",
+      });
     }
 
     const user = await userModel.findById(userId);
+
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
 
     const alreadyLiked = post.likes.includes(userId);
+
     if (alreadyLiked) {
-      return res.json({ message: "Already liked" });
+      return res.json({
+        message: "Already liked",
+      });
     }
 
+   
+
     post.likes.push(userId);
+
     await post.save();
 
-    return res.json({ message: "Liked successfully" });
+   
+
+    if (post.userId.toString() !== userId.toString()) {
+
+      const notification = new notificationModel({
+
+        senderId: userId,
+
+        receiverId: post.userId,
+
+        senderName: user.name,
+
+        senderProfile: user.profilePhoto,
+
+        type: "like",
+
+        postId: postId,
+
+        text: `${user.name} liked your post`
+
+      });
+
+      await notification.save();
+
+    }
+
+    return res.json({
+      message: "Liked successfully",
+    });
+
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+
+    return res.status(500).json({
+      message: error.message,
+    });
+
   }
+
 });
 
 app.post("/unlike", async (req, res) => {
@@ -419,6 +600,238 @@ app.post("/unbookmark", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+
+
+// app.get("/get-bookmarked-posts", async (req, res) => {
+
+//   const { userId } = req.body;
+
+//   console.log("hitted", userId);
+
+//   try {
+
+//     const objectUserId = new mongoose.Types.ObjectId(userId);
+
+//     const posts = await postModel
+//       .find({
+//         bookmarks: {
+//           $in: [objectUserId],
+//         },
+//       })
+//       .sort({ creationDateTime: -1 });
+
+//     return res.status(200).json({
+//       status: 200,
+//       bookmarks: posts,
+//     });
+
+//   } catch (error) {
+
+//     return res.status(500).json({
+//       message: error.message,
+//     });
+
+//   }
+// });
+
+
+app.post("/get-bookmarked-posts", async (req, res) => {
+
+  const { userId } = req.body;
+
+  try {
+
+    const posts = await postModel.find({
+      bookmarks: userId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      bookmarks: posts,
+    });
+
+  } catch (error) {
+
+    return res.status(500).json({
+      success: false,
+      bookmarks: [],
+      message: error.message,
+    });
+
+  }
+});
+
+
+
+// app.get("/explore-posts", async (req, res) => {
+
+//   console.log("hitted");
+//   try {
+
+//     const posts = await postModel
+//       .find()
+//       .sort({ creationDateTime: -1 });
+
+//     const trendingPosts = await postModel
+//       .find()
+//       .sort({ likes: -1 })
+//       .limit(5);
+
+//     const imagePosts = await postModel.find({
+//       postImage: { $ne: "" },
+//     });
+
+//     const users = await userModel.find().limit(8);
+
+//     return res.status(200).json({
+//       success: true,
+//       latestPosts: posts,
+//       trendingPosts,
+//       imagePosts,
+//       users,
+//     });
+
+//   } catch (error) {
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+
+//   }
+// });
+
+app.post("/explore-posts", async (req, res) => {
+
+  const { userId } = req.body;
+
+  try {
+
+    const posts = await postModel
+      .find()
+      .sort({ creationDateTime: -1 });
+
+    const trendingPosts = await postModel
+      .find()
+      .sort({ likes: -1 })
+      .limit(5);
+
+    const imagePosts = await postModel.find({
+      postImage: { $ne: "" },
+    });
+
+    const users = await userModel.find().limit(8);
+
+    // FOLLOWING IDS
+
+    const followingList = await followModel.find({
+      followerUserId: userId,
+    });
+
+    const followingIds = followingList.map(
+      (f) => f.followingUserId.toString()
+    );
+
+    // ADD FOLLOW STATUS
+
+    const updatedUsers = users.map((user) => ({
+
+      ...user._doc,
+
+      isFollowing: followingIds.includes(user._id.toString()),
+
+    }));
+
+    return res.status(200).json({
+      success: true,
+      latestPosts: posts,
+      trendingPosts,
+      imagePosts,
+      users: updatedUsers,
+    });
+
+  } catch (error) {
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+
+  }
+
+});
+
+
+
+app.post("/follow/check-follow-status", async (req, res) => {
+
+  const { followerUserId, followingUserId } = req.body;
+
+  try {
+
+    // SAME USER CHECK
+
+    if (followerUserId === followingUserId) {
+
+      return res.status(200).json({
+        success: true,
+        isFollowing: false,
+      });
+
+    }
+
+    // FIND FOLLOW RECORD
+
+    const follow = await followModel.findOne({
+      followerUserId,
+      followingUserId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      isFollowing: !!follow,
+    });
+
+  } catch (error) {
+
+    return res.status(500).json({
+      success: false,
+      isFollowing: false,
+      message: error.message,
+    });
+
+  }
+
+});
+
+
+
+app.get("/notifications/:userId", async(req,res)=>{
+
+  const userId = req.params.userId;
+
+  try{
+
+    const notifications = await notificationModel
+      .find({ receiverId:userId })
+      .sort({ createdAt:-1 });
+
+    return res.status(200).json({
+      success:true,
+      notifications
+    });
+
+  }catch(error){
+
+    return res.status(500).json({
+      success:false,
+      message:error.message
+    });
+
+  }
+
 });
 
 app.listen(PORT, () => {
